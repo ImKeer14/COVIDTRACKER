@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COVID-19 Tracker - Hospital Official Portal</title>
+  
+  <link rel="stylesheet" href="normalize.css">
+  <link rel="stylesheet" href="style.css">
+  
+  <script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+
+<div id="app" class="container">
+  <!-- Login Section -->
+  <div v-if="!isLoggedIn" class="login-form">
+    <header>
+      <h2>Hospital Official Login</h2>
+    </header>
+    
+    <form @submit.prevent="login">
+      <label for="username">Username:</label>
+      <input type="text" v-model="username" id="username" required>
+      <br>
+      <label for="password">Password:</label>
+      <input type="password" v-model="password" id="password" required>
+      <br><br>
+      <button type="submit">Login</button>
+      <p v-if="loginError" class="error">Invalid credentials, please try again.</p>
+    </form>
+  </div>
+
+  <!-- Dashboard Section -->
+  <div v-if="isLoggedIn">
+    <header>
+      <h1>COVID-19 Tracker</h1>
+      <nav>
+        <a href="#cases">Cases</a>
+        <a href="#vaccination">Vaccination Status</a>
+        <a href="#resources">Hospital Resources</a>
+      </nav>
+    </header>
+
+    <!-- Search COVID-19 Cases by Region -->
+    <section>
+      <h2>Search COVID-19 Cases by Country</h2>
+      <label for="region-search">Country:</label>
+      <input 
+        type="text" 
+        v-model="searchRegion" 
+        id="region-search" 
+        placeholder="Enter country name (e.g., USA, India, Germany)"
+        list="country-suggestions"
+      >
+      <datalist id="country-suggestions">
+        <option value="USA">United States</option>
+        <option value="India">India</option>
+        <option value="UK">United Kingdom</option>
+        <option value="Germany">Germany</option>
+        <option value="France">France</option>
+        <option value="Italy">Italy</option>
+        <option value="Spain">Spain</option>
+        <option value="Canada">Canada</option>
+        <option value="Australia">Australia</option>
+        <option value="Japan">Japan</option>
+      </datalist>
+      <button @click="fetchCasesByRegion">Search</button>
+      <div v-if="regionData" class="search-results">
+        <h3>Statistics for {{ regionData.country }}</h3>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <h4>Total Cases</h4>
+            <p>{{ formatNumber(regionData.cases) }}</p>
+          </div>
+          <div class="stat-box">
+            <h4>Deaths</h4>
+            <p>{{ formatNumber(regionData.deaths) }}</p>
+          </div>
+          <div class="stat-box">
+            <h4>Recovered</h4>
+            <p>{{ formatNumber(regionData.recovered) }}</p>
+          </div>
+          <div class="stat-box" v-if="regionData.active">
+            <h4>Active Cases</h4>
+            <p>{{ formatNumber(regionData.active) }}</p>
+          </div>
+          <div class="stat-box" v-if="regionData.critical">
+            <h4>Critical Cases</h4>
+            <p>{{ formatNumber(regionData.critical) }}</p>
+          </div>
+          <div class="stat-box" v-if="regionData.tests">
+            <h4>Total Tests</h4>
+            <p>{{ formatNumber(regionData.tests) }}</p>
+          </div>
+        </div>
+        <p v-if="regionData.updated" class="update-time">
+          Last updated: {{ formatDate(regionData.updated) }}
+        </p>
+      </div>
+    </section>
+
+    <!-- Update COVID-19 Data -->
+    <section>
+      <h2>Update COVID-19 Data</h2>
+      <form @submit.prevent="updateCasesData">
+        <label for="update-region">Region:</label>
+        <input type="text" v-model="updateRegion" id="update-region" required>
+        
+        <label for="update-cases">Cases:</label>
+        <input type="number" v-model="updateCases" id="update-cases" required>
+        
+        <label for="update-deaths">Deaths:</label>
+        <input type="number" v-model="updateDeaths" id="update-deaths" required>
+        
+        <label for="update-recovered">Recovered:</label>
+        <input type="number" v-model="updateRecovered" id="update-recovered" required>
+        
+        <button type="submit">Update</button>
+      </form>
+      <p v-if="updateMessage">{{ updateMessage }}</p>
+    </section>
+
+    <!-- Vaccination Progress Table -->
+    <section>
+      <h2>Vaccination Progress by Region</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Region</th>
+            <th>Doses Given</th>
+            <th>Population Vaccinated (%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(data, region) in vaccinationData" :key="region">
+            <td>{{ data.region }}</td>
+            <td>{{ data.dosesGiven }}</td>
+            <td>{{ data.populationVaccinated }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Hospital Resources Update Section -->
+    <section>
+      <h2>Hospital Resources</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Region</th>
+            <th>Beds Available</th>
+            <th>Ventilators</th>
+            <th>ICU Capacity</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="resource in hospitalResources" :key="resource.region">
+            <td>{{ resource.region }}</td>
+            <td>{{ resource.bedsAvailable }}</td>
+            <td>{{ resource.ventilatorsAvailable }}</td>
+            <td>{{ resource.icuCapacity }}</td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <!-- Form to Update Hospital Resources -->
+      <h3>Update Hospital Resources</h3>
+      <form @submit.prevent="updateHospitalResources">
+        <label for="resource-region">Region:</label>
+        <input type="text" v-model="updateResourceRegion" id="resource-region" required>
+
+        <label for="beds-available">Beds Available:</label>
+        <input type="number" v-model="updateBedsAvailable" id="beds-available" required>
+
+        <label for="ventilators-available">Ventilators Available:</label>
+        <input type="number" v-model="updateVentilatorsAvailable" id="ventilators-available" required>
+
+        <label for="icu-capacity">ICU Capacity:</label>
+        <input type="number" v-model="updateIcuCapacity" id="icu-capacity" required>
+
+        <button type="submit">Update Resources</button>
+      </form>
+      <p v-if="resourceUpdateMessage">{{ resourceUpdateMessage }}</p>
+    </section>
+  </div>
+</div>
+
+<script>
+new Vue({
+  el: '#app',
+  data: {
+    username: '',
+    password: '',
+    isLoggedIn: false,
+    loginError: false,
+    searchRegion: '',
+    regionData: null,
+    updateRegion: '',
+    updateCases: 0,
+    updateDeaths: 0,
+    updateRecovered: 0,
+    updateMessage: '',
+    vaccinationData: [],
+    hospitalResources: [],
+    updateResourceRegion: '',
+    updateBedsAvailable: 0,
+    updateVentilatorsAvailable: 0,
+    updateIcuCapacity: 0,
+    resourceUpdateMessage: ''
+  },
+  methods: {
+    login() {
+      // Updated to match the new backend authentication
+      if (this.username === 'official1' && this.password === 'password123') {
+        this.isLoggedIn = true;
+        this.loginError = false;
+        this.fetchVaccinationData();
+        this.fetchHospitalResources();
+      } else {
+        this.loginError = true;
+      }
+    },
+    fetchCasesByRegion() {
+    axios.get(`http://localhost:5000/covid/cases/${this.searchRegion}`)
+      .then(response => {
+        this.regionData = response.data;
+      })
+      .catch(error => {
+        console.error('Error fetching country data:', error);
+        this.regionData = {
+          country: this.searchRegion,
+          cases: 'Data unavailable',
+          deaths: 'Data unavailable',
+          recovered: 'Data unavailable',
+          message: 'Could not fetch data for this country. Please check the country name and try again.'
+        };
+      });
+  },
+  formatNumber(num) {
+    if (typeof num !== 'number') return num;
+    return new Intl.NumberFormat().format(num);
+  },
+  
+  formatDate(timestamp) {
+    if (!timestamp) return '';
+    return new Date(timestamp).toLocaleString();
+  },
+    
+    updateCasesData() {
+      const headers = {
+        username: this.username,
+        password: this.password
+      };
+      
+      axios.post('http://localhost:5000/covid/cases/update', {
+        region: this.updateRegion,
+        cases: this.updateCases,
+        deaths: this.updateDeaths,
+        recovered: this.updateRecovered
+      }, { headers })
+        .then(response => {
+          this.updateMessage = response.data.message;
+        })
+        .catch(error => {
+          console.error('Error updating cases data:', error);
+          this.updateMessage = 'Error updating data. Please try again.';
+        });
+    },
+    fetchVaccinationData() {
+      axios.get('http://localhost:5000/covid/vaccination-status')
+        .then(response => {
+          this.vaccinationData = response.data;
+        })
+        .catch(error => {
+          console.error('Error fetching vaccination data:', error);
+        });
+    },
+    fetchHospitalResources() {
+      axios.get('http://localhost:5000/covid/hospitals/resources')
+        .then(response => {
+          this.hospitalResources = response.data;
+        })
+        .catch(error => {
+          console.error('Error fetching hospital resources:', error);
+        });
+    },
+    updateHospitalResources() {
+      const headers = {
+        username: this.username,
+        password: this.password
+      };
+      
+      axios.post('http://localhost:5000/covid/hospitals/resources/update', {
+        region: this.updateResourceRegion,
+        bedsAvailable: parseInt(this.updateBedsAvailable),
+        ventilatorsAvailable: parseInt(this.updateVentilatorsAvailable),
+        icuCapacity: parseInt(this.updateIcuCapacity)
+      }, { headers })
+        .then(response => {
+          this.resourceUpdateMessage = response.data.message;
+          this.fetchHospitalResources(); // Refresh the resources table
+        })
+        .catch(error => {
+          console.error('Error updating hospital resources:', error);
+          this.resourceUpdateMessage = 'Error updating resources. Please try again.';
+        });
+    }
+  }
+});
+</script>
+
+</body>
+</html>
